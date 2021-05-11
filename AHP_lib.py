@@ -4,7 +4,7 @@ import mysql.connector
 class AHP_lib:
     def __init__(self, student_id):
         #データベースへの接続
-        dbh = mysql.connector.connect(
+        self.dbh = mysql.connector.connect(
         host='localhost',
         port='3306',
         db='naisyo',
@@ -12,7 +12,7 @@ class AHP_lib:
         password='Oshienaiyo',
         charset='utf8'
         )
-        self.cur = dbh.cursor()
+        self.cur = self.dbh.cursor()
         
         self.cluster_number = 6 #今回は固定
         self.evaluation_number = 12
@@ -36,11 +36,17 @@ class AHP_lib:
         return self.result
         
     def getEvaluationWeight(self):#評価項目のウエイトをDBから返す
-        self.cur.execute("SELECT * FROM `ahp_students` WHERE `id` = " + str(self.student_id) +";")
+        self.cur.execute("SELECT * FROM `students` WHERE `id` = " + str(self.student_id) +";")
         evaluation = self.cur.fetchall()
-        evaluation_weight = evaluation[0][2:14] #今回の評価項目数は12
-        return evaluation_weight
-        
+        evaluation_weight = evaluation[0][2:14] #この値は正規化されていない
+
+        #一対比較行列の作成
+        matrix = np.zeros((len(evaluation_weight), len(evaluation_weight))) #0で初期化をしておく
+        for j, val_j in enumerate(evaluation_weight): #1行ずつ取り出す
+            for k, val_k in enumerate(evaluation_weight):
+                matrix[j][k] = val_j / val_k
+        weight = self.getWeight(matrix)
+        return weight
         
     def getClusterMean(self):#クラスタの項目平均を求める
         altermean = [[]for i in range(self.cluster_number)] #それぞれの項目の平均を入れる(`employee`, `distance`, `branche`, `salary`, `holiday`, `student`, `listingscore`, `iscore`, `mscore`, `escore`, `cscore`, `bscore`)
@@ -72,4 +78,11 @@ class AHP_lib:
                 weight_matrix[i][j] = val_j
         return weight_matrix.T
     
-    
+    def updateResult(self, result):
+        self.cur.execute('UPDATE `students` SET `cluster0`=%s,`cluster1`=%s,`cluster2`=%s,`cluster3`=%s,`cluster4`=%s,`cluster5`=%s WHERE `id` = %s', (result[0],result[1],result[2],result[3],result[4],result[5],self.student_id))
+        self.dbh.commit()
+        
+    def disConnect(self):
+        #削除 
+        self.cur.close()
+        self.dbh.close()
